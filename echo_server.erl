@@ -25,11 +25,32 @@ handle() ->
       io:format("Client requesting time~n"),
       gen_tcp:send(Socket, formatted_time()),
       handle();
-    {tcp, Socket, Msg} ->
+    {tcp, Socket, <<"ECHO ", Msg/binary>>} ->
+      case binary:last(Msg) of
+        $\n ->
+          io:format("Received message ~p~n", [Msg]),
+          gen_tcp:send(Socket, Msg),
+          handle();
+        _ ->
+          handle(Msg)
+      end;
+    {tcp, _, Msg} ->
       io:format("Received message ~p~n", [Msg]),
-      gen_tcp:send(Socket, Msg),
       handle()
   end.
+
+handle(Buf) ->
+  receive
+    {tcp, Socket, <<Msg/binary>>} ->
+      io:format("Received part of the message ~p~n", [Msg]),
+      case binary:last(Msg) of
+        $\n ->
+          gen_tcp:send(Socket, [Buf, Msg]),
+          handle();
+        _ -> handle([Buf, Msg])
+      end
+  end.
+
 
 formatted_time() ->
   {{Year, Month, Day}, {Hour, Minute, Second}} = erlang:localtime(),
