@@ -1,4 +1,6 @@
 -module(server).
+-include("config.hrl").
+-mode(compile).
 -export([start_server/1, listen/1, accept/1, main/1]).
 
 start_server(Port) ->
@@ -6,17 +8,21 @@ start_server(Port) ->
 
 listen(Port) ->
   io:format("Starting server on port ~p~n", [Port]),
-  {ok, LSocket} = gen_tcp:listen(Port, [{active, true}, binary]),
-  spawn(server, accept, [LSocket]),
-  timer:sleep(infinity).
+  case gen_tcp:listen(Port, ?SOCK_OPTS) of
+    {ok, LSocket} ->
+      spawn(server, accept, [LSocket]),
+      timer:sleep(infinity);
+    {error, Reason} ->
+      io:format("error: ~p~n", [Reason])
+  end.
 
 accept(LSocket) ->
-  {ok, _} = gen_tcp:accept(LSocket),
+  {ok, Socket} = gen_tcp:accept(LSocket),
   spawn(server, accept, [LSocket]),
-  handle().
+  handle(Socket).
 
 send_message(Socket, Msg) ->
-  io:format("Sending message ~p~n", [Msg]),
+  io:format("Sending message ~s~n", [Msg]),
   gen_tcp:send(Socket, Msg).
 
 send_time(Socket) ->
@@ -26,23 +32,46 @@ close_connection(Socket) ->
   io:format("Closing connection~n", []),
   gen_tcp:close(Socket).
 
-handle() ->
-  receive
-    {tcp, Socket, <<"QUIT\n">>} ->
+send_file(Filename, Offset, Socket) ->
+  Path = "uploads/" ++ Filename,
+  case file:read_file(Path) of
+    {ok, <<_:Offset/binary, Data/binary>>} ->
+      gen_tcp:send(Socket, [<<"FILE ">>, Filename]),
+      timer:sleep(100),
+      io:format("Sending file: ~s~n", [Filename]),
+      gen_tcp:send(Socket, Data);
+    {error, enoent} ->
+      gen_tcp:send(Socket, <<"File not found">>);
+    {error, Reason} ->
+      io:format("error: ~p~n", [Reason])
+  end.
+
+handle(Socket) ->
+  case gen_tcp:recv(Socket, 0, 60000) of
+    {ok, <<"QUIT\n">>} ->
       close_connection(Socket);
-    {tcp, Socket, <<"TIME\n">>} ->
+    {ok, <<"TIME\n">>} ->
       send_time(Socket),
-      handle();
-    {tcp, Socket, <<"ECHO ", Msg/binary>>} ->
+      handle(Socket);
+    {ok, <<"ECHO ", Msg/binary>>} ->
       send_message(Socket, Msg),
-      handle();
-    {tcp, _, <<Msg/binary>>} ->
-      io:format("Received message ~p~n", [Msg]),
-      handle()
-  after 30000 ->
-      io:format("timeout")
+      handle(Socket);
+    {ok, <<"DOWNLOAD ", Offset:32/integer, Filename/binary>>} ->
+      io:format("DL Name: ~s; Offset: ~B~n", [Filename, Offset]),
+      send_file(binary_to_list(Filename), Offset, Socket),
+      handle(Socket);
+    {ok, <<Msg/binary>>} ->
+      io:format("Received message ~s~n", [Msg]),
+      send_message(Socket, "Unknown command"),
+      handle(Socket);
+    {error, closed} ->
+      io:format("disconnect..~n");
+    {error, timeout} ->
+      io:format("timeout..~n");
+    {error, Reason} ->
+      io:format("error: ~p~n", [Reason])
   end.
 
 main(_) ->
-  start_server(1337),
+  start_server(?PORT),
   timer:sleep(infinity).
