@@ -4,3 +4,4 @@
                             {nodelay, true},
                             {packet, raw}]).
 -define(PORT, 1337).
+-define(TIMEOUT, 30000).

@@ -33,21 +33,39 @@ close_connection(Socket) ->
   gen_tcp:close(Socket).
 
 send_file(Filename, Offset, Socket) ->
+  io:format("Sending File name: ~s; offset: ~B~n", [Filename, Offset]),
   Path = "uploads/" ++ Filename,
   case file:read_file(Path) of
     {ok, <<_:Offset/binary, Data/binary>>} ->
-      gen_tcp:send(Socket, [<<"FILE ">>, Filename]),
-      timer:sleep(100),
       io:format("Sending file: ~s~n", [Filename]),
       gen_tcp:send(Socket, Data);
     {error, enoent} ->
-      gen_tcp:send(Socket, <<"File not found">>);
+      gen_tcp:send(Socket, <<"File not found~n">>);
     {error, Reason} ->
       io:format("error: ~p~n", [Reason])
   end.
 
+receive_file(Filename, Socket) ->
+  Offset = filelib:file_size("uploads/" ++ Filename),
+  gen_tcp:send(Socket, <<Offset:32/integer>>),
+  io:format("Start ~s~n", [utils:formatted_time()]),                         %debug info
+  {ok, File} = file:open(("uploads/" ++ Filename), [append, raw]),
+  handle_download(File, Socket),
+  io:format("End ~s~n", [utils:formatted_time()]),                           %debug info
+  ok.
+
+handle_download(File, Socket) ->
+  case gen_tcp:recv(Socket, 0, 1000) of
+    {ok, <<Data/binary>>} ->
+      file:write(File, Data),
+      handle_download(File, Socket);
+    {error, closed} ->
+      io:format("disconnect..~n");
+    _ -> ok
+  end.
+
 handle(Socket) ->
-  case gen_tcp:recv(Socket, 0, 60000) of
+  case gen_tcp:recv(Socket, 0, ?TIMEOUT) of
     {ok, <<"QUIT\n">>} ->
       close_connection(Socket);
     {ok, <<"TIME\n">>} ->
@@ -57,11 +75,12 @@ handle(Socket) ->
       send_message(Socket, Msg),
       handle(Socket);
     {ok, <<"DOWNLOAD ", Offset:32/integer, Filename/binary>>} ->
-      io:format("DL Name: ~s; Offset: ~B~n", [Filename, Offset]),
       send_file(binary_to_list(Filename), Offset, Socket),
       handle(Socket);
-    {ok, <<Msg/binary>>} ->
-      io:format("Received message ~s~n", [Msg]),
+    {ok, <<"UPLOAD ", Filename/binary>>} ->
+      receive_file(binary_to_list(Filename), Socket),
+      handle(Socket);
+    {ok, _} ->
       send_message(Socket, "Unknown command"),
       handle(Socket);
     {error, closed} ->
