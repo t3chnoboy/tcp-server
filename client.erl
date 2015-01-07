@@ -4,7 +4,7 @@
 -export([main/1, wait_for_command/1]).
 
 main(_) ->
-  connect("localhost", ?PORT).
+  connect(?HOST, ?PORT).
 
 connect(Host, Port) ->
   {ok, Socket} = gen_tcp:connect(Host, Port, ?SOCK_OPTS),
@@ -48,8 +48,7 @@ download(Filename, Socket) ->
   io:format("Start ~s~n", [utils:formatted_time()]),                         %debug info
   {ok, File} = file:open(("downloads/" ++ Filename), [append, raw]),
   handle_download(File, Socket),
-  io:format("End ~s~n", [utils:formatted_time()]),                           %debug info
-  ok.
+  io:format("End ~s~n", [utils:formatted_time()]).                           %debug info
 
 handle_download(File, Socket) ->
   case gen_tcp:recv(Socket, 0, 1000) of
@@ -58,6 +57,8 @@ handle_download(File, Socket) ->
       handle_download(File, Socket);
     {error, closed} ->
       io:format("disconnect..~n");
+    {error, timeout} ->
+      ok;
     {error, Reason} ->
       io:format("error: ~p~n", [Reason])
   end.

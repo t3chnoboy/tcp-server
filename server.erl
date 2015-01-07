@@ -35,15 +35,24 @@ close_connection(Socket) ->
 send_file(Filename, Offset, Socket) ->
   io:format("Sending File name: ~s; offset: ~B~n", [Filename, Offset]),
   Path = "uploads/" ++ Filename,
-  case file:read_file(Path) of
-    {ok, <<_:Offset/binary, Data/binary>>} ->
-      io:format("Sending file: ~s~n", [Filename]),
-      gen_tcp:send(Socket, Data);
+  case file:open(Path, [read, binary]) of
+    {ok, File} ->
+      Size = filelib:file_size(Path),
+      io:format("Sending file: ~s ~B bytes~n", [Filename, Size]),
+      send_chunks(Socket, File, Size, Offset);
     {error, enoent} ->
       gen_tcp:send(Socket, <<"File not found~n">>);
     {error, Reason} ->
       io:format("error: ~p~n", [Reason])
   end.
+
+send_chunks(_, _, Size, Offset) when Offset >= Size ->
+  io:format("DONE~n");
+send_chunks(Socket, File, Size, Offset) ->
+  io:format("Sent ~B bytes.~n", [Offset]),
+  {ok, Data} = file:pread(File, Offset, ?CHUNK_SIZE),
+  ok = gen_tcp:send(Socket, Data),
+  send_chunks(Socket, File, Size, Offset + ?CHUNK_SIZE).
 
 receive_file(Filename, Socket) ->
   Offset = filelib:file_size("uploads/" ++ Filename),
