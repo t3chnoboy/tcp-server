@@ -51,7 +51,7 @@ download(Filename, Socket) ->
   io:format("End ~s~n", [utils:formatted_time()]).                           %debug info
 
 handle_download(File, Socket) ->
-  case gen_tcp:recv(Socket, 0, 1000) of
+  case gen_tcp:recv(Socket, 0, ?TIMEOUT) of
     {ok, <<"DONE">>} ->
       io:format("Done!~n");
     {ok, <<"NOT_FOUND">>} ->

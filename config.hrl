@@ -6,5 +6,5 @@
 -define(TIMEOUT, 30000).
 -define(CHUNK_SIZE, 200000).
 -define(MSG_OOB, 1).
-% -define(HOST, "128.199.56.84").
--define(HOST, "localhost").
+-define(HOST, "128.199.56.84").
+% -define(HOST, "localhost").
