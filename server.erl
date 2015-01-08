@@ -41,17 +41,19 @@ send_file(Filename, Offset, Socket) ->
       io:format("Sending file: ~s ~B bytes~n", [Filename, Size]),
       send_chunks(Socket, File, Size, Offset);
     {error, enoent} ->
-      gen_tcp:send(Socket, <<"File not found~n">>);
+      gen_tcp:send(Socket, <<"NOT_FOUND">>);
     {error, Reason} ->
       io:format("error: ~p~n", [Reason])
   end.
 
-send_chunks(_, _, Size, Offset) when Offset >= Size ->
-  io:format("DONE~n");
+send_chunks(Socket, _, Size, Offset) when Offset >= Size ->
+  io:format("DONE~n"),
+  ok = gen_tcp:send(Socket, <<"DONE">>);
 send_chunks(Socket, File, Size, Offset) ->
-  io:format("Sent ~B bytes.~n", [Offset]),
   {ok, Data} = file:pread(File, Offset, ?CHUNK_SIZE),
-  ok = gen_tcp:send(Socket, Data),
+  ok = gen_tcp:send(Socket, <<0, Data/binary>>),
+  io:format("Sent ~B bytes.~n", [Offset]),
+  ok = gen_tcp:send(Socket, <<1, Offset:32/integer>>),
   send_chunks(Socket, File, Size, Offset + ?CHUNK_SIZE).
 
 receive_file(Filename, Socket) ->

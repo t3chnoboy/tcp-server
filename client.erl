@@ -52,13 +52,20 @@ download(Filename, Socket) ->
 
 handle_download(File, Socket) ->
   case gen_tcp:recv(Socket, 0, 1000) of
-    {ok, <<Data/binary>>} ->
+    {ok, <<"DONE">>} ->
+      io:format("Done!~n");
+    {ok, <<"NOT_FOUND">>} ->
+      io:format("File not found!~n");
+    {ok, <<?MSG_OOB, Data:32/integer>>} ->
+      io:format("Received ~p~n", [Data]),
+      handle_download(File, Socket);
+    {ok, <<0, Data/binary>>} ->
       file:write(File, Data),
       handle_download(File, Socket);
     {error, closed} ->
       io:format("disconnect..~n");
     {error, timeout} ->
-      ok;
+      io:format("timeout..~n");
     {error, Reason} ->
       io:format("error: ~p~n", [Reason])
   end.
